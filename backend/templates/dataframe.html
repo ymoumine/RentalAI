@@ -1,0 +1,164 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Property List</title>
+    <!-- Include Bootstrap for styling (you can customize as needed) -->
+    <link href="https://stackpath.bootstrapcdn.com/bootstrap/4.5.2/css/bootstrap.min.css" rel="stylesheet">
+</head>
+<body>
+
+<div class="table-container">
+    <h2>Property List</h2>
+
+    {% if records %}
+    <table class="table table-striped">
+        <thead>
+        <tr>
+            <th>Id</th>
+            <th>MlsNumber</th>
+            <th>PublicRemarks</th>
+            <th>Individual</th>
+            <th>PostalCode</th>
+            <th>HistoricalDataIsCleared</th>
+            <th>ProvinceName</th>
+            <th>RelativeDetailsURL</th>
+            <th>StatusId</th>
+            <th>PhotoChangeDateUTC</th>
+            <th>Distance</th>
+            <th>RelativeURLEn</th>
+            <th>RelativeURLFr</th>
+            <th>Media</th>
+            <th>InsertedDateUTC</th>
+            <th>TimeOnRealtor</th>
+            <th>Tags</th>
+            <th>UploadedBy</th>
+            <th>Building Stories Total</th>
+            <th>Building Type</th>
+            <th>Building Unit Total</th>
+            <th>Property Price</th>
+            <th>Property LeaseRent</th>
+            <th>Property Type</th>
+            <th>Property Address</th>
+            <th>Property Longitude</th>
+            <th>Property Latitude</th>
+            <th>Property PermitShowAddress</th>
+            <th>Property Photo</th>
+            <th>Property Parking</th>
+            <th>Property ParkingSpaceTotal</th>
+            <th>Property TypeId</th>
+            <th>Property FarmType</th>
+            <th>Property OwnershipType</th>
+            <th>Property ZoningType</th>
+            <th>Property OwnershipTypeGroupIds</th>
+            <th>Property ParkingType</th>
+            <th>Property PriceUnformattedValue</th>
+            <th>Property LeaseRentUnformattedValue</th>
+            <th>Business BusinessSubType</th>
+            <th>Business BusinessType</th>
+            <th>Land SizeTotal</th>
+            <th>Land SizeFrontage</th>
+            <th>AlternateURL DetailsLink</th>
+            <th>Building BathroomTotal</th>
+            <th>Building Bedrooms</th>
+            <th>Building SizeInterior</th>
+            <th>Property AmmenitiesNearBy</th>
+            <th>OpenHouseInsertDateUTC</th>
+            <th>ListingTimeZone</th>
+            <th>ListingBoundary</th>
+            <th>ListingGMT</th>
+            <th>HasNewImageUpdate</th>
+        </tr>
+        </thead>
+        <tbody>
+        {% for record in records %}
+        <tr>
+            <td>{{ record['Id'] }}</td>
+            <td>{{ record['MlsNumber'] }}</td>
+            <td>{{ record['PublicRemarks'] }}</td>
+            <td>{{ record['Individual'] }}</td>
+            <td>{{ record['PostalCode'] }}</td>
+            <td>{{ record['HistoricalDataIsCleared'] }}</td>
+            <td>{{ record['ProvinceName'] }}</td>
+            <td>{{ record['RelativeDetailsURL'] }}</td>
+            <td>{{ record['StatusId'] }}</td>
+            <td>{{ record['PhotoChangeDateUTC'] }}</td>
+            <td>{{ record['Distance'] }}</td>
+            <td>{{ record['RelativeURLEn'] }}</td>
+            <td>{{ record['RelativeURLFr'] }}</td>
+            <td>{{ record['Media'] }}</td>
+            <td>{{ record['InsertedDateUTC'] }}</td>
+            <td>{{ record['TimeOnRealtor'] }}</td>
+            <td>{{ record['Tags'] }}</td>
+            <td>{{ record['UploadedBy'] }}</td>
+            <td>{{ record['Building.StoriesTotal'] }}</td>
+            <td>{{ record['Building.Type'] }}</td>
+            <td>{{ record['Building.UnitTotal'] }}</td>
+            <td>{{ record['Property.Price'] }}</td>
+            <td>{{ record['Property.LeaseRent'] }}</td>
+            <td>{{ record['Property.Type'] }}</td>
+            <td>{{ record['Property.Address.AddressText'] }}</td>
+            <td>{{ record['Property.Address.Longitude'] }}</td>
+            <td>{{ record['Property.Address.Latitude'] }}</td>
+            <td>{{ record['Property.Address.PermitShowAddress'] }}</td>
+            <td>{{ record['Property.Photo'] }}</td>
+            <td>{{ record['Property.Parking'] }}</td>
+            <td>{{ record['Property.ParkingSpaceTotal'] }}</td>
+            <td>{{ record['Property.TypeId'] }}</td>
+            <td>{{ record['Property.FarmType'] }}</td>
+            <td>{{ record['Property.OwnershipType'] }}</td>
+            <td>{{ record['Property.ZoningType'] }}</td>
+            <td>{{ record['Property.OwnershipTypeGroupIds'] }}</td>
+            <td>{{ record['Property.ParkingType'] }}</td>
+            <td>{{ record['Property.PriceUnformattedValue'] }}</td>
+            <td>{{ record['Property.LeaseRentUnformattedValue'] }}</td>
+            <td>{{ record['Business.BusinessSubType'] }}</td>
+            <td>{{ record['Business.BusinessType'] }}</td>
+            <td>{{ record['Land.SizeTotal'] }}</td>
+            <td>{{ record['Land.SizeFrontage'] }}</td>
+            <td>{{ record['AlternateURL.DetailsLink'] }}</td>
+            <td>{{ record['Building.BathroomTotal'] }}</td>
+            <td>{{ record['Building.Bedrooms'] }}</td>
+            <td>{{ record['Building.SizeInterior'] }}</td>
+            <td>{{ record['Property.AmmenitiesNearBy'] }}</td>
+            <td>{{ record['OpenHouseInsertDateUTC'] }}</td>
+            <td>{{ record['ListingTimeZone'] }}</td>
+            <td>{{ record['ListingBoundary'] }}</td>
+            <td>{{ record['ListingGMT'] }}</td>
+            <td>{{ record['HasNewImageUpdate'] }}</td>
+        </tr>
+        {% endfor %}
+        </tbody>
+    </table>
+
+    {% else %}
+    <p>No data available</p>
+    {% endif %}
+</div>
+
+</body>
+</html>
+
+<style>
+    .table-container {
+        margin-left: 10px;
+        max-height: 500px;
+        overflow-y: auto;
+    }
+
+    table {
+        width: 100%;
+        border-collapse: collapse;
+    }
+
+    th, td {
+        padding: 10px;
+        border: 1px solid #ddd;
+        white-space: nowrap;
+    }
+
+    th {
+        background-color: #f2f2f2;
+    }
+</style>
