@@ -14,6 +14,7 @@ from requests import HTTPError
 import pandas as pd
 from realtorAPI import get_coordinates, get_property_list, get_property_details
 import matplotlib.pyplot as plt
+import shap
 import plotly.express as px
 from tqdm import tqdm
 from sklearn.metrics import accuracy_score, mean_squared_error, r2_score, mean_absolute_error
@@ -229,17 +230,8 @@ def get_pred():
 
     prediction_list = prediction.tolist()
 
-    # Load the saved test set
-    test_set = pd.read_csv('OttawaON.csv')
-    test_values = test_set['Property.LeaseRentUnformattedValue'].values
-    test = np.mean(test_values, axis=0)
-
-    # Calculate the mean of R-squared values
-    accuracy = 100 * ( prediction / test ) if prediction != 0 else None
-
     return jsonify({
         'prediction': prediction_list,
-        'accuracy': accuracy.tolist() if accuracy is not None else None
     })
 
 
@@ -299,6 +291,41 @@ def plot_rent_histo():
     # Save the plot as an image
     image_path = 'static/rent_prices_histo.png'
     plt.savefig(image_path)
+    plt.close()  # Close the plot to avoid displaying it
+
+    return jsonify({
+        'image_path': image_path
+    })
+
+@app.route('/api/get_importance', methods=['GET'])
+def plot_feat_import():
+
+    # Load the model
+    with open('model.pkl', 'rb') as file:
+        model = pickle.load(file)
+
+    test = pd.read_csv('test_set.csv')
+    X_test = test.drop('target', axis=1)
+
+    # Fits the explainer
+    explainer = shap.Explainer(model.predict, X_test)
+    # Calculates the SHAP values - It takes some time
+    shap_values = explainer(X_test)
+
+    # Calculate average absolute SHAP values for each feature
+    mean_shap_values = np.abs(shap_values.values).mean(axis=0)
+
+    plt.figure()
+
+    shap.plots.beeswarm(shap_values, max_display=X_test.shape[1], show=False) # Plot feature importances
+
+    plt.title('Features Importance (Beeswarm Plot)')
+    plt.xlabel('SHAP Value')
+    plt.ylabel('Features')
+
+    # Save the plot as an image
+    image_path = 'static/rent_feat_import.png'
+    plt.savefig(image_path,bbox_inches='tight')
     plt.close()  # Close the plot to avoid displaying it
 
     return jsonify({

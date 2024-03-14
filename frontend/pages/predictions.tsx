@@ -538,7 +538,6 @@ export default function Listings() {
                                 {predictionResult !== null && (
                                     <div className="mt-4 text-fuchsia-500">
                                         <p style={{fontSize: '1.5em'}}>Prediction Result: ${predictionResult}</p>
-                                        <p style={{fontSize: '1.5em'}}>Result Accuracy: {parseFloat(accuracyResult).toFixed(2)}%</p>
                                     </div>
                                 )}
                             </div>

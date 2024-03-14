@@ -3,7 +3,7 @@ import {useEffect, useState} from "react";
 const stats = [
     { id: 1, name: 'Properties listed', value: '100+' },
     { id: 2, name: 'Machine Learning models', value: 'RF, DT, SVC' },
-    { id: 3, name: 'Accurate predictions', value: '+80%' },
+    { id: 3, name: 'Accuracy', value: '+81%' },
 ];
 
 const apiURL = 'http://localhost:5000/'
@@ -12,6 +12,7 @@ export default function Data() {
 
     const [imagePath1, setImagePath1] = useState('');
     const [imagePath2, setImagePath2] = useState('');
+    const [imagePath3, setImagePath3] = useState('');
 
     useEffect(() => {
         // Make a request to the Flask route to get the image path
@@ -26,6 +27,14 @@ export default function Data() {
         fetch(apiURL+'api/get_rent_distr')
             .then(response => response.json())
             .then(data => setImagePath2(data.image_path))
+            .catch(error => console.error('Error:', error));
+    }, []);
+
+    useEffect(() => {
+        // Make a request to the Flask route to get the image path
+        fetch(apiURL+'api/get_importance')
+            .then(response => response.json())
+            .then(data => setImagePath3(data.image_path))
             .catch(error => console.error('Error:', error));
     }, []);
 
@@ -58,6 +67,10 @@ export default function Data() {
 
                     <div className="flex justify-content-center">
                         {imagePath2 && <img src={apiURL + imagePath2} alt="Rent Prices Ditribution"/>}
+                    </div>
+
+                    <div className="ml-36">
+                        {imagePath3 && <img src={apiURL + imagePath3} alt="Important Features in our Predictions"/>}
                     </div>
                 </div>
             </main>
