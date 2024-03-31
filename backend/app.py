@@ -192,7 +192,16 @@ def get_pred():
     BuildingType = int(data['buildingType'])
 
     city = data['city']
-    coords = get_coordinates(city)  # [latMin, latMax, lonMin, lonMax]
+
+    # coords = get_coordinates("Ottawa")  # [latMin, latMax, lonMin, lonMax]
+    # TO FIX, GOT BOUDS FROM API FOR NOW, for ottawa
+    # "boundingbox": [
+    #     "44.9617738",
+    #     "45.5376502",
+    #     "-76.3555857",
+    #     "-75.2465783"
+    # ]
+    coords = ["44.9617738","45.5376502","-76.3555857","-75.2465783"]
     PropertyAddressLongitude = float(coords[2]) + float(coords[3]) / 2
     PropertyAddressLatitude = float(coords[0]) + float(coords[1]) / 2
 
