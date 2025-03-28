@@ -8,7 +8,7 @@ def get_coordinates(city):
     # Ottawa,ON to Ottawa, ON
     city = city.replace(',', ', ')
 
-    url = "https://nominatim.openstreetmap.org/search?q=" + city + "&format=json"
+    url = "https://https://nominatim.openstreetmap.org/search.php?city=Ottawa&state=Ontario&country=Canada&format=jsonv2"
     response = requests.get(url=url, timeout=10)
     response.raise_for_status()
     data = response.json()
@@ -22,7 +22,7 @@ def get_coordinates(city):
 
 
 # pylint: disable=too-many-arguments
-def get_property_list(lat_min, lat_max, long_min, long_max, building_type, current_page):
+def get_property_list(lat_min, lat_max, long_min, long_max, building_type, records_per_page=200, current_page=1, application_id=1):
     """Queries the Realtor.ca API to get a list of properties."""
 
     url = "https://api2.realtor.ca/Listing.svc/PropertySearch_Post"
@@ -36,11 +36,11 @@ def get_property_list(lat_min, lat_max, long_min, long_max, building_type, curre
         "LongitudeMin": long_min,
         "LongitudeMax": long_max,
         "CultureId": 1,  # for EN
-        "ApplicationId": 1,  # Unused
-        "PropertySearchTypeId": 0,  # No Preference for type of property
         "TransactionTypeId": 3,  # for rent
-        "BuildingTypeId": building_type,
-        "CurrentPage": current_page
+        "BuildingTypeId": building_type,  # 1 for house, 17 for apartment
+        "RecordsPerPage": records_per_page,
+        "CurrentPage": current_page,
+        "ApplicationId": application_id
     }
 
     response = requests.post(url=url, headers=headers, data=form, timeout=10)
