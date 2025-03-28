@@ -1,6 +1,6 @@
 import type { AppProps } from 'next/app'
 import "../app/globals.css";
-import Header from "@/pages/header";
+import Header from "@/components/header";
 
 import { Inter } from "next/font/google";
 
