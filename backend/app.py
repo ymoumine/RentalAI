@@ -14,16 +14,73 @@ from requests import HTTPError
 import pandas as pd
 from realtorAPI import get_coordinates, get_property_list, get_property_details
 import matplotlib.pyplot as plt
+from flasgger import Swagger
+from pymongo import MongoClient
+
+# use Agg backend for plotting
+plt.switch_backend('Agg')
+
 import shap
 import plotly.express as px
 from tqdm import tqdm
 from sklearn.metrics import accuracy_score, mean_squared_error, r2_score, mean_absolute_error
 
+swagger_config = {
+    "headers": [],
+    "specs": [
+        {
+            "endpoint": 'specifications',
+            "route": "/rental_ai_backend.json", 
+        }
+    ],
+    "static_url_path": "/flasgger_static",
+    "specs_route": "/documentation/swagger/"
+}
+
+FRONTEND_URL = os.environ.get('FRONTEND_URL', 'http://localhost:3000')
+MONGODB_URI = os.environ.get('MONGODB_URI', 'mongodb://localhost:27017/')
+
+
 app = Flask(__name__)
-CORS(app)
+CORS(app, origins=[FRONTEND_URL])
 
-""" Wrapper the queries module to get property data from realtor.ca. """
+swag = Swagger(app, config=swagger_config)
 
+# Initialize MongoDB connection
+client = MongoClient(MONGODB_URI)
+db = client['rentalai_db']
+properties_collection = db['properties']
+test_collection = db['test_data']
+
+# Function to load data from CSV to MongoDB
+def load_data_to_mongodb():
+    try:
+        # Load OttawaON data
+        ottawa_df = pd.read_csv('OttawaON.csv')
+        
+        # Convert DataFrame to list of dictionaries
+        ottawa_records = ottawa_df.to_dict('records')
+        
+        # clear existing data and insert new data
+        properties_collection.delete_many({})
+        properties_collection.insert_many(ottawa_records)
+        
+        # Load test_set data
+        test_df = pd.read_csv('test_set.csv')
+        
+        # Convert DataFrame to list of dictionaries
+        test_records = test_df.to_dict('records')
+        
+        # clear existing data and insert new data 
+        test_collection.delete_many({})
+        test_collection.insert_many(test_records)
+        
+        print("Data successfully loaded into MongoDB")
+    except Exception as e:
+        print(f"Error loading data to MongoDB: {e}")
+
+# Call this function when the app starts
+load_data_to_mongodb()
 
 # Handle OPTIONS requests (preflight)
 # @app.route('/', methods=['OPTIONS'])
@@ -31,35 +88,41 @@ CORS(app)
 #     return '', 200, {'Access-Control-Allow-Origin': '*', 'Access-Control-Allow-Headers': '*','Content-Type':'application/json'}
 
 def get_property_list_by_city(city, building_type):
-    """ Gets a list of properties for a given city, and returns it as a CSV file. """
+    """ Gets a list of properties for a given city, and caches it. """
 
-    coords = get_coordinates(city)  # Creates bounding box for city
+    # coords = get_coordinates(city)  # Creates bounding box for city
+    coords = ["44.9617738","45.5376502","-76.3555857","-75.2465783"] # Ottawa
     max_pages = 1
     current_page = 1
-    filename = "OttawaON.csv"
+    filename = "Ottawa2025.csv"
 
-    data = pd.DataFrame()
+    # data = pd.DataFrame()
     if os.path.exists(filename):
         results_df = pd.read_csv(filename)
         ## If the queries were interrupted, this will resume from the last page
-        # current_page = ceil(results_df.shape[0]/200) + 1
-        # max_pages = current_page + 1
+        current_page = ceil(results_df.shape[0]/200) + 1
+        max_pages = current_page + 1
     else:
         results_df = pd.DataFrame()
     while current_page <= max_pages:
         try:
             data = get_property_list(
-                coords[0], coords[1],
+                coords[0], coords[1], 
                 coords[2], coords[3],
                 building_type,
                 current_page=current_page)
             ## Rounds up the total records by the records per page to nearest int
-            max_pages = ceil(data["Paging"]["TotalRecords"] / data["Paging"]["RecordsPerPage"])
+            max_pages = ceil(data["Paging"]["TotalRecords"]/data["Paging"]["RecordsPerPage"])
             for json in data["Results"]:
-                results_df = results_df._append(pd.json_normalize(json), ignore_index=True)
+                # Use concat instead of append (which is deprecated)
+                new_row = pd.json_normalize(json)
+                results_df = pd.concat([results_df, new_row], ignore_index=True)
 
+            print("continuing: " + str(current_page))
+            # Save after each successful page fetch
             results_df.to_csv(filename, index=False)
             current_page += 1
+
             sleep(randint(600, 900))  # sleep 10-15 minutes to avoid rate-limit
         except HTTPError:
             print("Error occurred on city: " + city)
@@ -108,24 +171,39 @@ def get_property_list_by_city(city, building_type):
 
 @app.route('/api/home', methods=['GET'])
 def home():
+    """
+    Home route
+    ---
+    responses:
+      200:
+        description: Returns a welcome message
+    """
     return jsonify({
-        'message': "total_pages"
+        'message': "Welcome to RentalAI API"
     })
 
 
 @app.route('/api/property', methods=['GET'])
-def list():
+def list_properties():
+    """
+    List properties cached
+    ---
+    responses:
+      200:
+        description: Returns the top 10 properties from MongoDB
+    """
     try:
-        # Step 1: Read the existing CSV file into a DataFrame
-        results_df = pd.read_csv("OttawaON.csv")
-    except FileNotFoundError:
-        # Handle the case where the file doesn't exist initially
-        results_df = pd.DataFrame()
-
-    records = results_df.head(10).to_json(orient='records')  # Limit to 10 records for testing
-    records_json = json.loads(records)
-    # print(records[1])
-    return render_template('dataframe.html', records=records_json)
+        # Get all property keys
+        property_keys = properties_collection.find({}, {'_id': 0})
+        properties = []
+        
+        # Limit to 10 properties for testing
+        for key in property_keys[:10]:
+            properties.append(key)
+        
+        return render_template('dataframe.html', records=properties)
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
 
 
 @app.route('/api/property/<city>', methods=['GET'])
@@ -163,183 +241,271 @@ def update(city):
 
 @app.route('/api/get_data', methods=['GET'])
 def get_data():
-    # Assuming `results_df` is your DataFrame
+    """
+    Get all property data
+    ---
+    responses:
+      200:
+        description: Returns all property data from MongoDB
+    """
     try:
-        # Step 1: Read the existing CSV file into a DataFrame
-        results_df = pd.read_csv("OttawaON.csv")
-    except FileNotFoundError:
-        # Handle the case where the file doesn't exist initially
-        results_df = pd.DataFrame()
-
-    results_df = results_df.where(pd.notna(results_df), None)
-
-    # Convert DataFrame to a list of dictionaries
-    data = results_df.to_json(orient='records')
-
-    # Convert the data to JSON
-    json_data = json.loads(data)
-
-    return json_data
+        # Get all properties from MongoDB
+        properties = list(properties_collection.find({}, {'_id': 0}))
+        return jsonify(properties)
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
 
 
-@app.route('/api/get_prediction', methods=['POST'])
-def get_pred():
-    data = request.json
+@app.route('/api/get_test_data', methods=['GET'])
+def get_test_data():
+    """
+    Get test data
+    ---
+    responses:
+      200:
+        description: Returns test data from MongoDB
+    """
+    try:
+        # Get all test data from MongoDB
+        test_data = list(test_collection.find({}, {'_id': 0}))
+        return jsonify(test_data)
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
 
-    ProvinceName = int(data['province'])
-    BuildingBedrooms = float(data['bedNumb'])
-    BuildingStoriesTotal = float(data['storyNumb'])
-    BuildingType = int(data['buildingType'])
 
-    city = data['city']
+# @app.route('/api/get_prediction', methods=['POST'])
+# def get_pred():
+#     """
+#     Predicts the property price based on input features.
 
-    # coords = get_coordinates("Ottawa")  # [latMin, latMax, lonMin, lonMax]
-    # TO FIX, GOT BOUDS FROM API FOR NOW, for ottawa
-    # "boundingbox": [
-    #     "44.9617738",
-    #     "45.5376502",
-    #     "-76.3555857",
-    #     "-75.2465783"
-    # ]
-    coords = ["44.9617738","45.5376502","-76.3555857","-75.2465783"]
-    PropertyAddressLongitude = float(coords[2]) + float(coords[3]) / 2
-    PropertyAddressLatitude = float(coords[0]) + float(coords[1]) / 2
+#     ---
+#     parameters:
+#       - in: body
+#         name: body
+#         required: true
+#         schema:
+#           type: object
+#           properties:
+#             province:
+#               type: integer
+#               example: 1
+#             bedNumb:
+#               type: number
+#               format: float
+#               example: 3
+#             storyNumb:
+#               type: number
+#               format: float
+#               example: 2
+#             buildingType:
+#               type: integer
+#               example: 1
+#             city:
+#               type: string
+#               example: "Ottawa"
+#             amenities:
+#               type: integer
+#               example: 1
+#             publicTransit:
+#               type: integer
+#               example: 1
+#             recreation:
+#               type: integer
+#               example: 1
+#             shops:
+#               type: integer
+#               example: 1
+#             highway:
+#               type: integer
+#               example: 1
+#             park:
+#               type: integer
+#               example: 1
+#             schools:
+#               type: integer
+#               example: 1
+#             college:
+#               type: integer
+#               example: 0
+#             hospital:
+#               type: integer
+#               example: 1
+#             university:
+#               type: integer
+#               example: 1
+#             hasParking:
+#               type: integer
+#               example: 1
+#             postedDate:
+#               type: string
+#               format: date
+#               example: "2024-01-01"
+#             parkingSize:
+#               type: integer
+#               example: 2
+#     responses:
+#       200:
+#         description: Successful prediction
+#         schema:
+#           type: object
+#           properties:
+#             prediction:
+#               type: array
+#               items:
+#                 type: number
+#                 format: float
+#               example: [450000.0]
+#     """
+#     data = request.json
 
-    hasLaundry = int(data['amenities'])
-    PublicTransit = int(data['publicTransit'])
-    RecreationNearby = int(data['recreation'])
-    Shopping = int(data['shops'])
-    Highway = int(data['highway'])
-    Park = int(data['park'])
-    Schools = int(data['schools'])
-    CEGEP = int(data['college'])
-    Hospital = int(data['hospital'])
-    University = int(data['university'])
-    PropertyParkingType = int(data['hasParking'])
+#     ProvinceName = int(data['province'])
+#     BuildingBedrooms = float(data['bedNumb'])
+#     BuildingStoriesTotal = float(data['storyNumb'])
+#     BuildingType = int(data['buildingType'])
 
-    postedDate = data['postedDate']
+#     city = data['city']
 
-    Year = int(postedDate.split('-')[0])
-    Month = int(postedDate.split('-')[1])
-    Day = int(postedDate.split('-')[2])
+#     # coords = get_coordinates("Ottawa")  # [latMin, latMax, lonMin, lonMax]
+#     # TO FIX, GOT BOUDS FROM API FOR NOW, for ottawa
+#     # "boundingbox": [
+#     #     "44.9617738",
+#     #     "45.5376502",
+#     #     "-76.3555857",
+#     #     "-75.2465783"
+#     # ]
+#     coords = ["44.9617738","45.5376502","-76.3555857","-75.2465783"]
+#     PropertyAddressLongitude = float(coords[2]) + float(coords[3]) / 2
+#     PropertyAddressLatitude = float(coords[0]) + float(coords[1]) / 2
 
-    ParkingSizeType = int(data['parkingSize'])
+#     hasLaundry = int(data['amenities'])
+#     PublicTransit = int(data['publicTransit'])
+#     RecreationNearby = int(data['recreation'])
+#     Shopping = int(data['shops'])
+#     Highway = int(data['highway'])
+#     Park = int(data['park'])
+#     Schools = int(data['schools'])
+#     CEGEP = int(data['college'])
+#     Hospital = int(data['hospital'])
+#     University = int(data['university'])
+#     PropertyParkingType = int(data['hasParking'])
 
-    # Load the model
-    with open('model.pkl', 'rb') as file:
-        model = pickle.load(file)
+#     postedDate = data['postedDate']
 
-    features = [[ProvinceName, BuildingBedrooms, BuildingStoriesTotal,
-                 BuildingType, PropertyAddressLongitude, PropertyAddressLatitude,
-                 hasLaundry, PublicTransit, RecreationNearby, Shopping, Highway,
-                 Park, Schools, CEGEP, Hospital, University, PropertyParkingType,
-                 Year, Month, Day, ParkingSizeType]]
+#     Year = int(postedDate.split('-')[0])
+#     Month = int(postedDate.split('-')[1])
+#     Day = int(postedDate.split('-')[2])
 
-    prediction = model.predict(features)
+#     ParkingSizeType = int(data['parkingSize'])
 
-    prediction_list = prediction.tolist()
+#     # Load the model
+#     with open('model.pkl', 'rb') as file:
+#         model = pickle.load(file)
 
-    return jsonify({
-        'prediction': prediction_list,
-    })
+#     features = [[ProvinceName, BuildingBedrooms, BuildingStoriesTotal,
+#                  BuildingType, PropertyAddressLongitude, PropertyAddressLatitude,
+#                  hasLaundry, PublicTransit, RecreationNearby, Shopping, Highway,
+#                  Park, Schools, CEGEP, Hospital, University, PropertyParkingType,
+#                  Year, Month, Day, ParkingSizeType]]
+
+#     prediction = model.predict(features)
+
+#     prediction_list = prediction.tolist()
+
+#     return jsonify({
+#         'prediction': prediction_list,
+#     })
 
 
 @app.route('/api/get_rent_by_month', methods=['GET'])
 def plot_rent_prices():
-    # Assuming you have a DataFrame with columns 'postedDate' and 'target' (rent prices)
-    df = pd.read_csv('OttawaON.csv')
+    """
+    Monthly average
+    ---
+    responses:
+      200:
+        description: Returns the image path of the plot for the Monthly average rental prices
+    """
+    try:
+        # Get all property data from MongoDB
+        property_keys = properties_collection.find({}, {'_id': 0})
+        properties = []
+        
+        for key in property_keys:
+            properties.append(key)
+        
+        # Convert to DataFrame
+        df = pd.DataFrame(properties)
+        
+        df['target'] = df['Property.LeaseRentUnformattedValue']
 
-    df['target'] = df['Property.LeaseRentUnformattedValue']
+        # Convert 'InsertedDateUTC' to datetime format
+        ticks_per_second = 1e7  # 1 tick = 100 nanoseconds, 1 second = 1e7 ticks
+        epoch_ticks = 621355968000000000  # Ticks from 0001-01-01 to 1970-01-01
 
-    # Convert 'InsertedDateUTC' to datetime format
+        # Convert 'InsertedDateUTC' to datetime format
+        df['InsertedDateUTC'] = pd.to_datetime((df['InsertedDateUTC'] - epoch_ticks) / ticks_per_second, unit='s', utc=True, errors='coerce')
 
-    # 'InsertedDateUTC' is in ticks
-    ticks_per_second = 1e7  # 1 tick = 100 nanoseconds, 1 second = 1e7 ticks
-    epoch_ticks = 621355968000000000  # Ticks from 0001-01-01 to 1970-01-01
+        # Convert to Canada (Eastern Time)
+        df['postedDate'] = df['InsertedDateUTC'].dt.tz_convert('America/Toronto')
 
-    # Convert 'InsertedDateUTC' to datetime format
-    df['InsertedDateUTC'] = pd.to_datetime((df['InsertedDateUTC'] - epoch_ticks) / ticks_per_second, unit='s', utc=True, errors='coerce')
+        # Sort DataFrame by 'postedDate'
+        df = df.sort_values(by='postedDate')
 
-    # Convert to Canada (Eastern Time)
-    df['postedDate'] = df['InsertedDateUTC'].dt.tz_convert('America/Toronto')
+        # Plotting
+        plt.figure(figsize=(15, 6))
+        plt.plot(df['postedDate'], df['target'], marker='o', linestyle='-', color='purple')
+        plt.title('Rent Prices Over Time')
+        plt.xlabel('Posted Date')
+        plt.ylabel('Rent Price')
+        plt.grid(True)
 
-    # Sort DataFrame by 'postedDate'
-    df = df.sort_values(by='postedDate')
-
-    # Plotting
-    plt.figure(figsize=(15, 6))
-    plt.plot(df['postedDate'], df['target'], marker='o', linestyle='-', color='purple')
-    plt.title('Rent Prices Over Time')
-    plt.xlabel('Posted Date')
-    plt.ylabel('Rent Price')
-    plt.grid(True)
-
-    # Save the plot as an image
-    image_path = 'static/rent_prices_plot.png'
-    plt.savefig(image_path)
-
-    return jsonify({
-        'image_path': image_path
-    })
+        # Save the plot as an image
+        image_path = 'static/rent_prices_plot.png'
+        plt.savefig(image_path)
+        plt.close()
+        
+        return jsonify({
+            'image_path': image_path
+        })
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
 
 @app.route('/api/get_rent_distr', methods=['GET'])
 def plot_rent_histo():
+    """
+    Distribution of rental prices
+    ---
+    responses:
+      200:
+        description: Returns the image path of the plot for the distribution of rental prices across all listings
+    """
+    try:
+        # Get all properties from MongoDB
+        properties = list(properties_collection.find({}, {'_id': 0}))
+        
+        # Convert to DataFrame
+        df = pd.DataFrame(properties)
+        
+        # Assuming 'Property.LeaseRentUnformattedValue' is the column with rental prices
+        rental_prices = df['Property.LeaseRentUnformattedValue']
 
-    df = pd.read_csv('OttawaON.csv')
+        plt.figure(figsize=(15, 6))
+        # Create a histogram to show the distribution of rental prices
+        plt.hist(rental_prices, bins=10, edgecolor='black', color='purple')
+        plt.title('Distribution of Rental Prices')
+        plt.xlabel('Rental Price')
+        plt.ylabel('Frequency')
 
-    # Assuming 'Property.LeaseRentUnformattedValue' is the column with rental prices
-    rental_prices = df['Property.LeaseRentUnformattedValue']
-
-    plt.figure(figsize=(15, 6))
-    # Create a histogram to show the distribution of rental prices
-    plt.hist(rental_prices, bins=10, edgecolor='black', color='purple')
-    plt.title('Distribution of Rental Prices')
-    plt.xlabel('Rental Price')
-    plt.ylabel('Frequency')
-
-    # Save the plot as an image
-    image_path = 'static/rent_prices_histo.png'
-    plt.savefig(image_path)
-    plt.close()  # Close the plot to avoid displaying it
-
-    return jsonify({
-        'image_path': image_path
-    })
-
-@app.route('/api/get_importance', methods=['GET'])
-def plot_feat_import():
-
-    # Load the model
-    with open('model.pkl', 'rb') as file:
-        model = pickle.load(file)
-
-    test = pd.read_csv('test_set.csv')
-    X_test = test.drop('target', axis=1)
-
-    # Fits the explainer
-    explainer = shap.Explainer(model.predict, X_test)
-    # Calculates the SHAP values - It takes some time
-    shap_values = explainer(X_test)
-
-    # Calculate average absolute SHAP values for each feature
-    mean_shap_values = np.abs(shap_values.values).mean(axis=0)
-
-    plt.figure()
-
-    shap.plots.beeswarm(shap_values, max_display=X_test.shape[1], show=False) # Plot feature importances
-
-    plt.title('Features Importance (Beeswarm Plot)')
-    plt.xlabel('SHAP Value')
-    plt.ylabel('Features')
-
-    # Save the plot as an image
-    image_path = 'static/rent_feat_import.png'
-    plt.savefig(image_path,bbox_inches='tight')
-    plt.close()  # Close the plot to avoid displaying it
-
-    return jsonify({
-        'image_path': image_path
-    })
+        # Save the plot as an image
+        image_path = 'static/rent_prices_histo.png'
+        plt.savefig(image_path)
+        plt.close()  # Close the plot to avoid displaying it
+        
+        return jsonify({
+            'image_path': image_path
+        })
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
 
 
 if __name__ == '__main__':
