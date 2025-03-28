@@ -2,3 +2,15 @@
 .idea
 
 .ipynb_checkpoints
+
+# virtual environment
+venv/
+
+# python cache
+__pycache__
+
+# environment variables
+.env
+
+
+
