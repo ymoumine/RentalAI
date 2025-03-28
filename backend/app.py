@@ -12,7 +12,7 @@ import os
 from random import randint
 from requests import HTTPError
 import pandas as pd
-from backend.external.realtorAPI import get_coordinates, get_property_list, get_property_details
+from external.realtorAPI import get_coordinates, get_property_list, get_property_details
 import matplotlib.pyplot as plt
 from flasgger import Swagger
 from pymongo import MongoClient
@@ -94,7 +94,7 @@ def get_property_list_by_city(city, building_type):
     coords = ["44.9617738","45.5376502","-76.3555857","-75.2465783"] # Ottawa
     max_pages = 1
     current_page = 1
-    filename = "Ottawa2025.csv"
+    filename = "data/df_2025.csv"
 
     # data = pd.DataFrame()
     if os.path.exists(filename):
