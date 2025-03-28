@@ -12,7 +12,7 @@ import os
 from random import randint
 from requests import HTTPError
 import pandas as pd
-from realtorAPI import get_coordinates, get_property_list, get_property_details
+from backend.external.realtorAPI import get_coordinates, get_property_list, get_property_details
 import matplotlib.pyplot as plt
 from flasgger import Swagger
 from pymongo import MongoClient
@@ -56,7 +56,7 @@ test_collection = db['test_data']
 def load_data_to_mongodb():
     try:
         # Load OttawaON data
-        ottawa_df = pd.read_csv('OttawaON.csv')
+        ottawa_df = pd.read_csv('data/df_set.csv')
         
         # Convert DataFrame to list of dictionaries
         ottawa_records = ottawa_df.to_dict('records')
@@ -66,7 +66,7 @@ def load_data_to_mongodb():
         properties_collection.insert_many(ottawa_records)
         
         # Load test_set data
-        test_df = pd.read_csv('test_set.csv')
+        test_df = pd.read_csv('data/test_set.csv')
         
         # Convert DataFrame to list of dictionaries
         test_records = test_df.to_dict('records')
