@@ -1,137 +1,330 @@
 import Link from "next/link";
-import {useEffect, useState} from "react";
+import { useEffect, useState } from "react";
 import axios from 'axios';
+import { 
+  BuildingOfficeIcon, 
+  MagnifyingGlassIcon, 
+  ArrowsUpDownIcon, 
+  ChevronLeftIcon, 
+  ChevronRightIcon,
+  BedIcon,
+  BathIcon,
+  HomeIcon,
+  MapPinIcon,
+  PhotoIcon
+} from '@heroicons/react/24/outline';
+import { number, string } from "yup";
 
 const apiURL = 'http://localhost:5000/api';
-const itemsPerPage = 4; // number of items per page
-export default function Index() {
+const itemsPerPage = 8; // Number of items per page
+
+export default function Listings() {
     const [data, setData] = useState([]);
+    const [loading, setLoading] = useState(true);
+    const [error, setError] = useState(null);
+    const [currentPage, setCurrentPage] = useState(1);
+    const [searchTerm, setSearchTerm] = useState('');
+    const [sortBy, setSortBy] = useState('price-asc'); // Default sort by price ascending
+    const [imageErrors, setImageErrors] = useState({});
 
     useEffect(() => {
-        // Fetch data from your Flask endpoint
-        fetch(apiURL+'/get_data')
-            .then(response => response.json())
-            .then(jsonData => {
-                // Parse the JSON string into an array
-                //const dataArray = JSON.parse(jsonData);
-                console.log(jsonData[1])
-                setData(jsonData);
+        setLoading(true);
+        axios.get(apiURL+'/get_data')
+            .then(response => {
+                console.log('API Response:', response.data);
+                
+                // Check if response.data is a string (possibly JSON)
+                if (typeof response.data === 'string') {
+                    try {
+                        // Try to clean and parse the string as JSON
+                        // Replace NaN with null to make it valid JSON
+                        const cleanedData = response.data
+                            .replace(/: NaN/g, ': null')
+                            .replace(/: Infinity/g, ': null')
+                            .replace(/: -Infinity/g, ': null');
+                            
+                        const parsedData = JSON.parse(cleanedData);
+                        console.log('Parsed string data:', parsedData);
+                        
+                        // Check if parsed data is an array
+                        if (Array.isArray(parsedData)) {
+                            processData(parsedData);
+                        } else {
+                            // If parsed data is an object that contains an array
+                            const dataArray = parsedData.listings || parsedData.properties || [];
+                            processData(dataArray);
+                        }
+                    } catch (e) {
+                        console.error('Error parsing string data:', e);
+                        console.log('Raw data sample:', response.data.substring(0, 200) + '...');
+                        setData([]);
+                    }
+                    setLoading(false);
+                    return;
+                }
+                
+                // Check if response.data is an array
+                if (!Array.isArray(response.data)) {
+                    console.error('Expected array but got:', typeof response.data);
+                    // If response.data is not an array but has a property that contains the array
+                    const dataArray = response.data.listings || response.data.properties || [];
+                    processData(dataArray);
+                    setLoading(false);
+                    return;
+                }
+                
+                // Process array data
+                processData(response.data);
+                setLoading(false);
             })
-            .catch(error => console.error('Error fetching data:', error));
+            .catch(error => {
+                console.error('API Error:', error);
+                setError(error);
+                setLoading(false);
+            });
     }, []);
 
-    const [currentPage, setCurrentPage] = useState(1);
-
-    // Calculate total number of pages
-    const totalPages = Math.ceil(data.length / itemsPerPage);
-
-    // Ensure currentPage is within valid range
-
-    // Calculate index range for the current page
-    const startIndex = currentPage + itemsPerPage - 5;
-    const endIndex = Math.min(startIndex + itemsPerPage, data.length);
-
-    // Filter the data to display only items for the current page
-    const currentPageData = data.slice(startIndex, endIndex);
-
-    const goToNextPage = () => {
-        if (currentPage < totalPages) {
-            setCurrentPage(currentPage + 1);
-        }
+    // Helper function to process data
+    const processData = (rawData) => {
+        // Add a unique index to each item to use as a key
+        const dataWithUniqueKeys = (rawData || []).map((item, index) => ({
+            ...item,
+            _uniqueIndex: index // Add a unique index property
+        }));
+        
+        // Remove any duplicates based on Id
+        const uniqueData = [];
+        const idSet = new Set();
+        
+        dataWithUniqueKeys.forEach(item => {
+            if (item.Id && !idSet.has(item.Id)) {
+                idSet.add(item.Id);
+                uniqueData.push(item);
+            } else if (!item.Id) {
+                // If no Id exists, use the unique index as identifier
+                uniqueData.push(item);
+            }
+        });
+        
+        console.log('Processed data:', uniqueData);
+        setData(uniqueData);
     };
 
-    const goToPreviousPage = () => {
-        if (currentPage > 1) {
-            setCurrentPage(currentPage - 1);
+    // handle bedroom calculation
+    const handBedroomNumber = (bedroom: string) => {
+        // param is a string : 1 || 1 + 0 eg.
+        if (bedroom.includes('+')) {
+            const parts = bedroom.split('+');
+            bedroom = (Number(parts[0]) + Number(parts[1])).toString();
         }
+
+        return bedroom
+    }
+
+    const filteredData = data.filter(item => {
+        // Check if item is valid before accessing properties
+        if (!item) return false;
+        
+        const address = item['Property.Address.AddressText'] || '';
+        const price = item['Property.LeaseRent'] || '';
+        const bedrooms = item['Building.Bedrooms'] || '';
+        const buildingType = item['Building.Type'] || '';
+        
+        const searchString = `${address} ${price} ${bedrooms} ${buildingType}`.toLowerCase();
+        return searchString.includes(searchTerm.toLowerCase());
+    });
+
+    // Sort data based on sortBy value
+    const sortedData = [...filteredData].sort((a, b) => {
+        if (sortBy === 'price-asc') {
+            return extractPrice(a['Property.LeaseRent'] || '0') - extractPrice(b['Property.LeaseRent'] || '0');
+        } else if (sortBy === 'price-desc') {
+            return extractPrice(b['Property.LeaseRent'] || '0') - extractPrice(a['Property.LeaseRent'] || '0');
+        } else if (sortBy === 'bedrooms-asc') {
+            return parseInt(a['Building.Bedrooms'] || '0', 10) - parseInt(b['Building.Bedrooms'] || '0', 10);
+        } else if (sortBy === 'bedrooms-desc') {
+            return parseInt(b['Building.Bedrooms'] || '0', 10) - parseInt(a['Building.Bedrooms'] || '0', 10);
+        }
+        return 0;
+    });
+
+    // Paginate data
+    const totalPages = Math.ceil(sortedData.length / itemsPerPage);
+    const startIndex = (currentPage - 1) * itemsPerPage;
+    const paginatedData = sortedData.slice(startIndex, startIndex + itemsPerPage);
+
+    // Helper function to extract numeric price from string
+    function extractPrice(priceString) {
+        const match = priceString.match(/\$?([\d,]+)/);
+        if (match) {
+            return parseInt(match[1].replace(/,/g, ''), 10);
+        }
+        return 0;
+    }
+
+    // Handle page change
+    const handlePageChange = (page) => {
+        setCurrentPage(page);
+        window.scrollTo({ top: 0, behavior: 'smooth' });
     };
 
     return (
-        <>
-            <header className="bg-gray-700 shadow">
-                <div className="mx-auto max-w-7xl px-4 py-6 sm:px-6 lg:px-8">
-                    <h1 className="text-3xl font-bold tracking-tight text-white">Rental Listings</h1>
+        <div className="bg-gray-900 min-h-screen">
+            <header className="bg-gray-800 shadow-lg">
+                <div className="max-w-7xl mx-auto px-4 py-6 sm:px-6 lg:px-8">
+                    <h1 className="text-3xl font-bold text-white flex items-center gap-2">
+                        <BuildingOfficeIcon className="h-8 w-8 text-fuchsia-500" />
+                        Available Properties
+                    </h1>
                 </div>
             </header>
-            <main className="bg-gray-900">
-                <div className="mx-auto max-w-7xl py-6 sm:px-6 lg:px-8">
-                    <ul role="list" className="divide-y divide-gray-500">
-                        {Array.isArray(data) && data.length > 0 ? (
-                            currentPageData.map(param => (
-                                <Link key={param['Id']}
-                                      className="flex justify-between gap-x-6 py-8 hover:bg-gray-700 rounded-3xl"
-                                      href={'listings/property/' + param['Id']}>
-                                    <div className="flex min-w-0 gap-x-4 ml-10">
-                                        <img className="h-12 w-12 flex-none"
-                                             src={"https://www.pinclipart.com/picdir/big/387-3872576_purple-home-5-icon-free-icons-house-with.png"}
-                                             alt=""/>
-                                        <div className="min-w-0 flex-auto">
-                                            <p className="text-md font-semibold leading-6">{param['Property.Address.AddressText']}</p>
-                                            <a className="text-md font-semibold leading-5 text-fuchsia-800"
-                                               href={"https://www.realtor.ca/" + param['RelativeURLEn']}> See
-                                                More...</a>
-                                            <p className="mt-1 truncate text-sm leading-5 text-gray-400">{param['ProvinceName']}</p>
+
+            <main className="max-w-7xl mx-auto px-4 py-8 sm:px-6 lg:px-8">
+                {/* Loading State */}
+                {loading ? (
+                    <div className="flex justify-center items-center py-20">
+                        <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-fuchsia-500"></div>
+                        <p className="ml-4 text-fuchsia-500 font-medium">Loading properties...</p>
+                    </div>
+                ) : (
+                    <>
+                        {/* Search and Filter */}
+                        <div className="mb-8 bg-gray-800 rounded-xl p-6 shadow-lg">
+                            <div className="flex flex-col md:flex-row gap-4">
+                                <div className="flex-1 relative">
+                                    <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                                        <MagnifyingGlassIcon className="h-5 w-5 text-gray-400" />
+                                    </div>
+                                    <input
+                                        type="text"
+                                        className="block w-full pl-10 pr-3 py-2 border border-gray-600 rounded-md leading-5 bg-gray-700 text-gray-300 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-fuchsia-500 focus:border-fuchsia-500"
+                                        placeholder="Search by address, price, bedrooms..."
+                                        value={searchTerm}
+                                        onChange={(e) => setSearchTerm(e.target.value)}
+                                    />
+                                </div>
+                                <div className="w-full md:w-64">
+                                    <div className="relative">
+                                        <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                                            <ArrowsUpDownIcon className="h-5 w-5 text-gray-400" />
                                         </div>
-                                    </div>
-                                    <div className="hidden shrink-0 sm:flex sm:flex-col sm:items-end mr-10">
-                                        <p className="text-md leading-6">{param['Property.LeaseRent']}</p>
-                                        {param['Building.Bedrooms'] ? (
-                                            <p className="mt-1 text-sm leading-5 text-gray-400">
-                                                Bedrooms: {param['Building.Bedrooms']}
-                                            </p>
-                                        ) : (
-                                            <div className="mt-1 flex items-center gap-x-1.5">
-                                                <div className="flex-none rounded-full bg-emerald-500/20 p-1">
-                                                    <div className="h-1.5 w-1.5 rounded-full bg-emerald-500"/>
-                                                </div>
-                                                <p className="text-sm leading-5 text-gray-400">Studio</p>
-                                            </div>
-                                        )}
-                                    </div>
-                                </Link>
-                            ))) : (
-                            <main
-                                className="grid min-h-full place-items-center bg-gray-800 px-6 py-24 sm:py-32 lg:px-8">
-                                <div className="text-center">
-                                    <p className="text-base font-semibold text-fuchsia-700">404</p>
-                                    <h1 className="mt-4 text-3xl font-bold tracking-tight text-gray-100 sm:text-5xl">Server
-                                        Error</h1>
-                                    <p className="mt-6 text-base leading-7 text-gray-300">Sorry, we couldn’t retrieve
-                                        any data.</p>
-                                    <div className="mt-10 flex items-center justify-center gap-x-6">
-                                        <a
-                                            href="/home"
-                                            className="rounded-md bg-fuchsia-900 px-3.5 py-2.5 text-sm font-semibold text-white shadow-sm hover:bg-indigo-500 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-indigo-600"
+                                        <select
+                                            className="block w-full pl-10 pr-3 py-2 border border-gray-600 rounded-md leading-5 bg-gray-700 text-gray-300 focus:outline-none focus:ring-2 focus:ring-fuchsia-500 focus:border-fuchsia-500"
+                                            value={sortBy}
+                                            onChange={(e) => setSortBy(e.target.value)}
                                         >
-                                            Go back home
-                                        </a>
-                                        <a href="/about/contact" className="text-sm font-semibold text-gray-300">
-                                            Learn More <span aria-hidden="true">&rarr;</span>
-                                        </a>
+                                            <option value="price-asc">Price: Low to High</option>
+                                            <option value="price-desc">Price: High to Low</option>
+                                            <option value="bedrooms-asc">Bedrooms: Low to High</option>
+                                            <option value="bedrooms-desc">Bedrooms: High to Low</option>
+                                        </select>
                                     </div>
                                 </div>
-                            </main>
+                            </div>
+                            <div className="mt-4 text-gray-400 text-sm">
+                                Showing {paginatedData.length} of {filteredData.length} properties
+                            </div>
+                        </div>
+
+                        {/* Property Grid */}
+                        {paginatedData.length === 0 ? (
+                            <div className="bg-gray-800 rounded-lg p-8 text-center">
+                                <BuildingOfficeIcon className="h-12 w-12 mx-auto text-gray-500 mb-4" />
+                                <h3 className="text-xl font-medium text-white mb-2">No properties found</h3>
+                                <p className="text-gray-400">Try adjusting your search criteria</p>
+                            </div>
+                        ) : (
+                            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+                                {paginatedData.map((listing) => (
+                                    <Link 
+                                        href={`/listings/property/${listing.Id}`}
+                                        key={`listing-${listing._uniqueIndex}`}
+                                        className="bg-gray-800 rounded-lg overflow-hidden shadow-lg hover:shadow-xl transition-shadow duration-300 flex flex-col h-full"
+                                    >
+                                        <div className="h-48 bg-gray-700 relative">
+                                            <div className="w-full h-full flex flex-col items-center justify-center">
+                                                <PhotoIcon className="h-12 w-12 text-gray-500 mb-2" />
+                                                <div className="text-center px-4">
+                                                    <p className="text-gray-400">{listing['Building.Type'] || 'Property'}</p>
+                                                    <p className="text-gray-500 text-sm">{handBedroomNumber(listing['Building.Bedrooms']) || '0'} BR</p>
+                                                </div>
+                                            </div>
+                                            <div className="absolute top-0 right-0 bg-fuchsia-600 text-white px-3 py-1 m-2 rounded-md font-medium">
+                                                {listing['Property.LeaseRent'] || 'Contact'}
+                                            </div>
+                                        </div>
+                                        <div className="p-4 flex-1 flex flex-col">
+                                            <h3 className="text-white font-medium text-lg mb-2 line-clamp-1">{listing['Property.Address.AddressText']}</h3>
+                                            <div className="text-gray-400 mb-4 line-clamp-2">
+                                                {listing['PublicRemarks'] ? (
+                                                    listing['PublicRemarks'].substring(0, 100) + (listing['PublicRemarks'].length > 100 ? '...' : '')
+                                                ) : (
+                                                    'No description available'
+                                                )}
+                                            </div>
+                                            <div className="mt-auto flex items-center text-gray-300 text-sm">
+                                                <div className="flex items-center mr-4">
+                                                    <HomeIcon className="h-4 w-4 mr-1 text-fuchsia-500" />
+                                                    <span>{handBedroomNumber(listing['Building.Bedrooms']) || '0'} BR</span>
+                                                </div>
+                                                <div className="flex items-center">
+                                                    <MapPinIcon className="h-4 w-4 mr-1 text-fuchsia-500" />
+                                                    <span>{listing['PostalCode']}</span>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </Link>
+                                ))}
+                            </div>
                         )}
-                    </ul>
-                    {/* Pagination controls */}
-                    <div className="flex justify-center mt-4 space-x-4">
-                        <button
-                            onClick={goToPreviousPage}
-                            disabled={currentPage === 1}
-                            className="px-4 py-2 bg-gray-800 text-white rounded-md disabled:bg-gray-400"
-                        >
-                            Previous
-                        </button>
-                        <button
-                            onClick={goToNextPage}
-                            disabled={currentPage >= totalPages}
-                            className="px-4 py-2 bg-gray-800 text-white rounded-md disabled:bg-gray-400"
-                        >
-                            Next
-                        </button>
-                    </div>
-                </div>
+
+                        {/* Pagination */}
+                        {totalPages > 1 && (
+                            <div className="flex justify-center mt-8">
+                                <nav className="flex items-center gap-1">
+                                    <button
+                                        onClick={() => handlePageChange(Math.max(1, currentPage - 1))}
+                                        disabled={currentPage === 1}
+                                        className={`p-2 rounded-md ${
+                                            currentPage === 1 
+                                                ? 'text-gray-500 cursor-not-allowed' 
+                                                : 'text-white hover:bg-gray-700'
+                                        }`}
+                                    >
+                                        <ChevronLeftIcon className="h-5 w-5" />
+                                    </button>
+                                    
+                                    {[...Array(totalPages)].map((_, i) => (
+                                        <button
+                                            key={i + 1}
+                                            onClick={() => handlePageChange(i + 1)}
+                                            className={`px-3 py-1 rounded-md ${
+                                                currentPage === i + 1
+                                                    ? 'bg-fuchsia-600 text-white'
+                                                    : 'text-gray-300 hover:bg-gray-700'
+                                            }`}
+                                        >
+                                            {i + 1}
+                                        </button>
+                                    ))}
+                                    
+                                    <button
+                                        onClick={() => handlePageChange(Math.min(totalPages, currentPage + 1))}
+                                        disabled={currentPage === totalPages}
+                                        className={`p-2 rounded-md ${
+                                            currentPage === totalPages 
+                                                ? 'text-gray-500 cursor-not-allowed' 
+                                                : 'text-white hover:bg-gray-700'
+                                        }`}
+                                    >
+                                        <ChevronRightIcon className="h-5 w-5" />
+                                    </button>
+                                </nav>
+                            </div>
+                        )}
+                    </>
+                )}
             </main>
-        </>
+        </div>
     );
 }
