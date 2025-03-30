@@ -69,15 +69,50 @@ def load_data_to_mongodb():
     test_collection.delete_many({})
     test_collection.insert_many(test_records)
 
-# Call this function when the app starts
+def load_test_plot():
+    # Get test data from MongoDB
+    try:
+        test_data = list(test_collection.find({}, {'_id': 0}))
+        if not test_data:
+            print("No test data found in MongoDB")
+            return jsonify({"error": "No test data found in MongoDB"}), 500
+            
+        print(f"Found {len(test_data)} test records")
+    except Exception as e:
+        print(f"Error retrieving test data: {e}")
+        return jsonify({"error": f"Error retrieving test data: {str(e)}"}), 500
+    
+    # Convert to DataFrame
+    test = pd.DataFrame(test_data)
+
+    X_test = test.drop('target', axis=1)
+
+    # Fits the explainer
+    explainer = shap.Explainer(model.predict, X_test)
+    # Calculates the SHAP values - It takes some time
+    shap_values = explainer(X_test)
+
+    plt.figure()
+    shap.plots.beeswarm(shap_values, max_display=10, show=False)
+    plt.title('Features Importance (Beeswarm Plot)')
+    plt.xlabel('SHAP Value')
+    plt.ylabel('Features')
+
+    return plt
+
+# 1. Call this function when the app starts
 load_data_to_mongodb()
 
-# load model from pickle file
+# 2. load model from pickle file
 def load_model_from_file():
     with open('model.pkl', 'rb') as file:
         return pickle.load(file)
 
 model = load_model_from_file()
+
+# 3. pre load test plot for faster response
+test_plot = load_test_plot()
+
 
 # Function to save plot to S3
 def save_plot_to_s3(plt, filename):
@@ -236,6 +271,7 @@ def get_pred():
         'prediction': prediction_list,
     })
 
+    
 @app.route('/api/get_importance', methods=['GET'])
 def plot_feat_import():
     """
@@ -245,42 +281,8 @@ def plot_feat_import():
       200:
         description: Returns the image path of the plot for the factors that most influence our rental price prediction
     """
-        # Check if MongoDB is connected
-    try:
-        # Simple ping to check connection
-        client.admin.command('ping')
-        print("MongoDB connected successfully")
-    except Exception as e:
-        print(f"MongoDB connection error: {e}")
-        return jsonify({"error": f"MongoDB connection error: {str(e)}"}), 500
-        
-    # Get test data from MongoDB
-    try:
-        test_data = list(test_collection.find({}, {'_id': 0}))
-        if not test_data:
-            print("No test data found in MongoDB")
-            return jsonify({"error": "No test data found in MongoDB"}), 500
-            
-        print(f"Found {len(test_data)} test records")
-    except Exception as e:
-        print(f"Error retrieving test data: {e}")
-        return jsonify({"error": f"Error retrieving test data: {str(e)}"}), 500
-    
-    # Convert to DataFrame
-    test = pd.DataFrame(test_data)
-
-    X_test = test.drop('target', axis=1)
-
-    # Fits the explainer
-    explainer = shap.Explainer(model.predict, X_test)
-    # Calculates the SHAP values - It takes some time
-    shap_values = explainer(X_test)
-
-    plt.figure()
-    shap.plots.beeswarm(shap_values, max_display=10, show=False)
-    plt.title('Features Importance (Beeswarm Plot)')
-    plt.xlabel('SHAP Value')
-    plt.ylabel('Features')
+    # test plot preloaded for faster response
+    plt = test_plot
 
     filename = "rent_feat_import.png"
     

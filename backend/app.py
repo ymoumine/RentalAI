@@ -482,7 +482,6 @@ def plot_rent_prices():
             image_path = f'./static/{filename}'
             plt.savefig(image_path) 
             plt.close()
-            
             # Return the local path
             return jsonify({
                 'image_path': f"{API_URL}/static/{filename}"

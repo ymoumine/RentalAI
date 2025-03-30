@@ -11,12 +11,13 @@ import {
   BeakerIcon,
   ExclamationTriangleIcon
 } from '@heroicons/react/24/outline';
+import Image from 'next/image';
 
 const apiURL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000/api';
 const mlApiURL = process.env.NEXT_PUBLIC_ML_API_URL || 'http://localhost:5001/api';
 
 export default function Dashboard() {
-    const [loading, setLoading] = useState(true);
+    const [loading, setLoading] = useState(false);
     const [rentPricesImage, setRentPricesImage] = useState('');
     const [rentDistributionImage, setRentDistributionImage] = useState('');
     const [featureImportanceImage, setFeatureImportanceImage] = useState('');
@@ -25,6 +26,7 @@ export default function Dashboard() {
     const [medianRent, setMedianRent] = useState(0);
     const [trendingUp, setTrendingUp] = useState(true);
     const [imageLoadError, setImageLoadError] = useState(false);
+
 
     useEffect(() => {
         const fetchData = async () => {
@@ -86,39 +88,56 @@ export default function Dashboard() {
                     // Determine if trend is up or down
                     setTrendingUp(Math.random() > 0.5);
                 }
-                
+                } catch (error) {
+                    console.error('Error fetching dashboard data:', error);
+                    setImageLoadError(true);
+                } finally {
+                    setLoading(false);
+                }
+
                 // Then fetch the chart images
                 try {
                     // Fetch rent prices over time chart
-                    const rentPricesResponse = await axios.get(`${apiURL}/get_rent_by_month`);
-                    // Use the URL directly from the response
-                    setRentPricesImage(rentPricesResponse.data.image_path);
+                    const rentPricesResponse = await fetch(`${apiURL}/get_rent_by_month`);
+
+                    if (rentPricesResponse.ok) {
+                        const rentPricesData = await rentPricesResponse.json();
+                        
+                        setRentPricesImage(rentPricesData.image_path);
+                    } else {
+                        const errorData = await rentPricesResponse.json();
+                        console.error('Failed to fetch rent prices data:', errorData.error);
+                        setImageLoadError(true);
+                    }
                     
                     // Fetch rent distribution chart
-                    const rentDistributionResponse = await axios.get(`${apiURL}/get_rent_distr`);
-                    // Use the URL directly from the response
-                    setRentDistributionImage(rentDistributionResponse.data.image_path);
-                    
+                    const rentDistributionResponse = await fetch(`${apiURL}/get_rent_distr`);
+                    if (rentDistributionResponse.ok) {
+                        const rentDistributionData = await rentDistributionResponse.json();
+                        
+                        setRentDistributionImage(rentDistributionData.image_path);
+                    } else {
+                        const errorData = await rentDistributionResponse.json();
+                        console.error('Failed to fetch rent distribution data:', errorData.error);
+                        setImageLoadError(true);
+                    }
+                        
                     // Fetch feature importance chart
-                    const response = await fetch(`${mlApiURL}/get_importance`);
-                    if (response.ok) {
-                        const featureImportanceData = await response.json();
-                        // Use the URL directly from the response
+                    const featureImportanceResponse = await fetch(`${mlApiURL}/get_importance`);
+                    if (featureImportanceResponse.ok) {
+                        const featureImportanceData = await featureImportanceResponse.json();
+                        
                         setFeatureImportanceImage(featureImportanceData.image_path);
                     } else {
-                        const errorData = await response.json();
+                        const errorData = await featureImportanceResponse.json();
                         console.error('Failed to fetch feature importance data:', errorData.error);
                         setImageLoadError(true);
                     }
                 } catch (error) {
                     console.error('Error fetching chart images:', error);
-                    setImageLoadError(true);
+                } finally {
+                    setLoading(false);
                 }
-            } catch (error) {
-                console.error('Error fetching dashboard data:', error);
-            } finally {
-                setLoading(false);
-            }
         };
         
         fetchData();
@@ -156,12 +175,15 @@ export default function Dashboard() {
         }
         
         return (
-            <img 
-                src={src} 
-                alt={alt} 
-                className="w-full h-auto"
-                onError={handleImageError}
-            />
+            <div className="relative w-full h-64">
+                <Image 
+                    src={src} 
+                    alt={alt}
+                    layout="fill"
+                    objectFit="contain"
+                    onError={handleImageError}
+                />
+            </div>
         );
     };
 
@@ -321,13 +343,13 @@ export default function Dashboard() {
                                 <p className="text-gray-400 text-sm mb-4">
                                     Factors that most influence rental price predictions in our machine learning model
                                 </p>
-                            </div>
+                    </div>
                             <div className="px-6 pb-6">
                                 <div className="bg-gray-700 rounded-lg overflow-hidden">
                                     {renderImage(featureImportanceImage, "Feature Importance")}
-                                </div>
-                            </div>
-                        </div>
+                </div>
+                    </div>
+                </div>
                     </>
                 )}
             </main>
