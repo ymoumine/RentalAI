@@ -16,9 +16,16 @@ from external.realtorAPI import get_coordinates, get_property_list, get_property
 import matplotlib.pyplot as plt
 from flasgger import Swagger
 from pymongo import MongoClient
+from io import BytesIO
 
 # use Agg backend for plotting
 plt.switch_backend('Agg')
+
+from dotenv import load_dotenv
+import boto3
+
+# Load environment variables
+load_dotenv()
 
 import shap
 import plotly.express as px
@@ -30,16 +37,25 @@ swagger_config = {
     "specs": [
         {
             "endpoint": 'specifications',
-            "route": "/rental_ai_backend.json", 
+            "route": "/rental_ai_api.json", 
         }
     ],
     "static_url_path": "/flasgger_static",
     "specs_route": "/documentation/swagger/"
 }
 
+API_URL = os.environ.get('API_URL', 'http://localhost:5000/api')
 FRONTEND_URL = os.environ.get('FRONTEND_URL', 'http://localhost:3000')
 MONGODB_URI = os.environ.get('MONGODB_URI', 'mongodb://localhost:27017/')
+S3_BUCKET = os.environ.get('S3_BUCKET_NAME', 'rental-ai-ml-images')
 
+# Initialize S3 client
+s3_client = boto3.client(
+    's3',
+    aws_access_key_id=os.environ.get('AWS_ACCESS_KEY_ID'),
+    aws_secret_access_key=os.environ.get('AWS_SECRET_ACCESS_KEY'),
+    region_name=os.environ.get('AWS_REGION', 'us-east-2')
+)
 
 app = Flask(__name__)
 CORS(app, origins=[FRONTEND_URL])
@@ -50,7 +66,6 @@ swag = Swagger(app, config=swagger_config)
 client = MongoClient(MONGODB_URI)
 db = client['rentalai_db']
 properties_collection = db['properties']
-test_collection = db['test_data']
 
 # Function to load data from CSV to MongoDB
 def load_data_to_mongodb():
@@ -64,16 +79,6 @@ def load_data_to_mongodb():
         # clear existing data and insert new data
         properties_collection.delete_many({})
         properties_collection.insert_many(ottawa_records)
-        
-        # Load test_set data
-        test_df = pd.read_csv('data/test_set.csv')
-        
-        # Convert DataFrame to list of dictionaries
-        test_records = test_df.to_dict('records')
-        
-        # clear existing data and insert new data 
-        test_collection.delete_many({})
-        test_collection.insert_many(test_records)
         
         print("Data successfully loaded into MongoDB")
     except Exception as e:
@@ -256,22 +261,6 @@ def get_data():
         return jsonify({"error": str(e)}), 500
 
 
-@app.route('/api/get_test_data', methods=['GET'])
-def get_test_data():
-    """
-    Get test data
-    ---
-    responses:
-      200:
-        description: Returns test data from MongoDB
-    """
-    try:
-        # Get all test data from MongoDB
-        test_data = list(test_collection.find({}, {'_id': 0}))
-        return jsonify(test_data)
-    except Exception as e:
-        return jsonify({"error": str(e)}), 500
-
 
 # @app.route('/api/get_prediction', methods=['POST'])
 # def get_pred():
@@ -415,6 +404,24 @@ def get_test_data():
 #         'prediction': prediction_list,
 #     })
 
+# Function to save plot to S3
+def save_plot_to_s3(plt, filename):
+    # Save plot to BytesIO object
+    img_data = BytesIO()
+    plt.savefig(img_data, format='png', bbox_inches='tight')
+    img_data.seek(0)
+    
+    # Upload to S3
+    s3_client.upload_fileobj(
+        img_data, 
+        S3_BUCKET, 
+        filename,
+        ExtraArgs={'ContentType': 'image/png'}
+    )
+    
+    # Return the public URL
+    return f"https://{S3_BUCKET}.s3.amazonaws.com/{filename}"
+
 
 @app.route('/api/get_rent_by_month', methods=['GET'])
 def plot_rent_prices():
@@ -459,16 +466,31 @@ def plot_rent_prices():
         plt.ylabel('Rent Price')
         plt.grid(True)
 
-        # Save the plot as an image
-        image_path = 'static/rent_prices_plot.png'
-        plt.savefig(image_path)
-        plt.close()
+        filename = 'rent_prices_plot.png'
+
+        # For production: save to S3
+        if os.environ.get('ENVIRONMENT') == 'production':
+            image_path = save_plot_to_s3(plt, filename)
+            plt.close()
+            return jsonify({'image_path': image_path})  
         
-        return jsonify({
-            'image_path': image_path
-        })
+        # For local development: save to static folder  
+        else:
+            # Make sure the static directory exists
+            os.makedirs('static', exist_ok=True)
+            
+            image_path = f'./static/{filename}'
+            plt.savefig(image_path) 
+            plt.close()
+            
+            # Return the local path
+            return jsonify({
+                'image_path': f"{API_URL}/static/{filename}"
+            })
+        
     except Exception as e:
         return jsonify({"error": str(e)}), 500
+
 
 @app.route('/api/get_rent_distr', methods=['GET'])
 def plot_rent_histo():
@@ -485,7 +507,7 @@ def plot_rent_histo():
         
         # Convert to DataFrame
         df = pd.DataFrame(properties)
-        
+
         # Assuming 'Property.LeaseRentUnformattedValue' is the column with rental prices
         rental_prices = df['Property.LeaseRentUnformattedValue']
 
@@ -496,14 +518,28 @@ def plot_rent_histo():
         plt.xlabel('Rental Price')
         plt.ylabel('Frequency')
 
-        # Save the plot as an image
-        image_path = 'static/rent_prices_histo.png'
-        plt.savefig(image_path)
-        plt.close()  # Close the plot to avoid displaying it
+        filename = 'rent_prices_histo.png'
+
+         # For production: save to S3
+        if os.environ.get('ENVIRONMENT') == 'production':
+            image_path = save_plot_to_s3(plt, filename)
+            plt.close()
+            return jsonify({'image_path': image_path})
         
-        return jsonify({
-            'image_path': image_path
-        })
+        # For local development: save to static folder
+        else:
+            # Make sure the static directory exists
+            os.makedirs('static', exist_ok=True)
+            
+            image_path = f'./static/{filename}'
+            plt.savefig(image_path)
+            plt.close()
+            
+            # Return the local path
+            return jsonify({
+                'image_path': f"{API_URL}/static/{filename}"
+            })
+        
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
