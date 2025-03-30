@@ -21,20 +21,22 @@ import {
     DocumentTextIcon,
     CurrencyDollarIcon
 } from "@heroicons/react/20/solid";
+import Image from 'next/image';
+
+const S3_URL = process.env.PFP_URL;
 
 const user = {
-    name: 'Tom Cook',
-    email: 'tom@example.com',
-    imageUrl:
-        'https://www.kindpng.com/picc/m/259-2590523_circle-profile-picture-tumblr-moon-purple-png-transparent.png',
+    name: 'Yassine Moumine',
+    email: 'yassimoumine@gmail.com',
+    imageUrl: S3_URL || '/images/pfp.png',
 }
 
 // Navigation routes with icons
 const listRoutes = [
     {name: 'Home', href: '/', icon: HomeIcon},
-    {name: 'Dashboard', href: '/dashboard', icon: ChartBarIcon},
     {name: 'Listings', href: '/listings', icon: BuildingOfficeIcon},
     {name: 'Predictions', href: '/predictions', icon: MapIcon},
+    {name: 'Dashboard', href: '/dashboard', icon: ChartBarIcon},
     {name: 'About', href: '/about', icon: CommandLineIcon},
 ]
 
@@ -94,7 +96,13 @@ export default function Header() {
                                             <div>
                                                 <Menu.Button className="relative flex max-w-xs items-center rounded-full bg-gray-800 text-sm focus:outline-none focus:ring-2 focus:ring-white focus:ring-offset-2 focus:ring-offset-gray-800">
                                                     <span className="sr-only">Open user menu</span>
-                                                    <img className="h-8 w-8 rounded-full" src={user.imageUrl} alt="" />
+                                                    <Image 
+                                                        className="h-8 w-8 rounded-full" 
+                                                        src={user.imageUrl} 
+                                                        alt="User profile" 
+                                                        width={32} 
+                                                        height={32} 
+                                                    />
                                                 </Menu.Button>
                                             </div>
                                             <Transition
@@ -168,7 +176,13 @@ export default function Header() {
                             <div className="border-t border-gray-700 pt-4 pb-3">
                                 <div className="flex items-center px-5">
                                     <div className="flex-shrink-0">
-                                        <img className="h-10 w-10 rounded-full" src={user.imageUrl} alt="" />
+                                        <Image 
+                                            className="h-10 w-10 rounded-full" 
+                                            src={user.imageUrl} 
+                                            alt="User profile" 
+                                            width={40} 
+                                            height={40} 
+                                        />
                                     </div>
                                     <div className="ml-3">
                                         <div className="text-base font-medium text-white">{user.name}</div>

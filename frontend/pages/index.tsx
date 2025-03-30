@@ -1,13 +1,20 @@
+import { CurrencyDollarIcon, HomeIcon } from '@heroicons/react/24/outline';
+import Image from 'next/image';
+
+const landingPageImageURL = process.env.LANDING_PAGE_IMAGE_URL;
+
 export default function Index() {
     return (
         <>
-            <header className="bg-gray-700 shadow">
+            <header className="bg-gray-800 shadow">
                 <div className="mx-auto max-w-7xl px-4 py-6 sm:px-6 lg:px-8">
-                    <h1 className="text-3xl font-bold tracking-tight text-white">Welcome to RentalAI</h1>
+                    <h1 className="text-3xl font-bold text-white flex items-center gap-2">
+                    <HomeIcon className="h-8 w-8 text-fuchsia-500" />
+                    Welcome to RentalAI</h1>
                 </div>
             </header>
             <main className="bg-gray-900">
-                <div className="mx-auto max-w-7xl py-6 sm:px-6 lg:px-8">
+                <div className="mx-auto max-w-7xl py-1 sm:px-6 lg:px-8">
                     <div className="relative isolate overflow-hidden bg-gray-900 px-6 pt-16 shadow-2xl sm:rounded-3xl sm:px-16 md:pt-24 lg:flex lg:gap-x-20 lg:px-24 lg:pt-0">
                         <svg
                             viewBox="0 0 1024 1024"
@@ -40,18 +47,18 @@ export default function Index() {
                                 >
                                     Get started
                                 </a>
-                                <a href="/about/contact" className="text-sm font-semibold leading-6 text-white">
+                                <a href="/dashboard" className="text-sm font-semibold leading-6 text-white">
                                     Learn more <span aria-hidden="true">→</span>
                                 </a>
                             </div>
                         </div>
                         <div className="relative mt-16 h-80 lg:mt-8">
-                            <img
-                                className="absolute left-0 top-0 w-[57rem] max-w-none rounded-md bg-white/5 ring-1 ring-white/10 md:hue-rotate-60"
-                                src="https://th.bing.com/th/id/R.71dfc7da5d4fafea8dd4b8fc0fcb50e1?rik=ixv9Y72K7qKa3g&pid=ImgRaw&r=0"
+                            <Image
+                                src={landingPageImageURL || '/images/landing-image.png'}
                                 alt="App screenshot"
                                 width={1824}
                                 height={1080}
+                                className="absolute left-0 top-0 w-[57rem] max-w-none rounded-md bg-white/5 ring-1 ring-white/10"
                             />
                         </div>
                     </div>

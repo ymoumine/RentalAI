@@ -608,7 +608,7 @@ export default function Predictions() {
                 </div> */}
                 
                 {/* Submit Button */}
-                <div className="col-span-1 sm:col-span-2 lg:col-span-3 mt-8">
+                <div className="col-span-1 sm:col-span-2 lg:col-span-3 mt-8 pr-20">
                   <button
                     type="submit"
                     disabled={isLoading}
@@ -656,7 +656,7 @@ export default function Predictions() {
         {predictionResult !== 0 && (
           <div className="mt-2" ref={mapSectionRef}>
             <div className="bg-gray-800 rounded-xl shadow-xl overflow-hidden">
-              <div className="px-6 py-8">
+              <div className="px-6 py-3">
                 <h2 className="text-xl font-semibold text-white flex items-center gap-2">
                   <MapPinIcon className="h-6 w-6 text-fuchsia-500" />
                   Properties Within Your Budget

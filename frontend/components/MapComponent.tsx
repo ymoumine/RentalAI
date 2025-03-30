@@ -95,7 +95,7 @@ const MapComponent: React.FC<MapComponentProps> = ({
       }
 
       return bedroom
-  }
+    }
 
       // Get property details
       const bedrooms = handBedroomNumber(listing['Building.Bedrooms']) || 'Studio';

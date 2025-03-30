@@ -84,13 +84,13 @@ export default function Id() {
 
     // handle bedroom calculation
     const handBedroomNumber = (bedroom: string) => {
-        // param is a string : 1 || 1 + 0 eg.
-        if (bedroom.includes('+')) {
-            const parts = bedroom.split('+');
-            bedroom = (Number(parts[0]) + Number(parts[1])).toString();
-        }
+      // param is a string : 1 || 1 + 0 eg.
+      if (bedroom.includes('+')) {
+          const parts = bedroom.split('+');
+          bedroom = (Number(parts[0]) + Number(parts[1])).toString();
+      }
 
-        return bedroom
+      return bedroom
     }
 
     // Helper function to check if a feature exists
@@ -181,7 +181,7 @@ export default function Id() {
                                     </svg>
                                     <div>
                                         <p className="text-sm text-gray-400">Bedrooms</p>
-                                        <p className="text-xl font-bold text-white">{property['Building.Bedrooms'] || 'Not specified'}</p>
+                                        <p className="text-xl font-bold text-white">{handBedroomNumber(property['Building.Bedrooms']) || 'Not specified'}</p>
                                     </div>
                                 </div>
                                 
